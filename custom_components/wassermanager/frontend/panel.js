@@ -316,17 +316,27 @@ class WaterManagerPanel extends HTMLElement {
       hour: "2-digit", minute: "2-digit", hourCycle: "h23",
     });
     const peak = Math.max(...todayReadings.map(point => (point.value - baseline.value) * 1000));
-    const path = todayReadings.map(point => {
-      const [hour, minute] = clock.format(point.time).split(":").map(Number);
-      const x = ((hour * 60 + minute) / 1440 * 1000).toFixed(2);
-      const y = (86 - (point.value - baseline.value) * 1000 / Math.max(1, peak) * 76).toFixed(2);
-      return `H${x}V${y}`;
-    }).join("");
+    const xAt = time => {
+      const [hour, minute] = clock.format(time).split(":").map(Number);
+      return (hour * 60 + minute) / 1440 * 1000;
+    };
+    const points = todayReadings.map(({ time, value }) => ({
+      x: xAt(time),
+      y: 86 - (value - baseline.value) * 1000 / Math.max(1, peak) * 76,
+    }));
+    const path = points.map(({ x, y }) => `H${x.toFixed(2)}V${y.toFixed(2)}`).join("");
+    const last = points.at(-1);
+    const lastReading = todayReadings.at(-1);
+    const lastValue = format((lastReading.value - baseline.value) * 1000, "L");
+    const lastTime = clock.format(lastReading.time);
+    const nowX = Math.max(last.x, xAt(Date.now()));
     chart.innerHTML = `<svg viewBox="0 0 1000 90" preserveAspectRatio="none" role="img"
-      aria-label="Verbrauch heute, höchster Stand ${format(peak, "L")}">
+      aria-label="Verbrauch heute, zuletzt ${lastValue} um ${lastTime}">
       <path d="M0 86H1000" stroke="#d6e4e6" fill="none"/>
       <path d="M0 86${path}" stroke="#12675f" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"/>
-    </svg><div class="hours"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>`;
+      <path d="M${last.x} ${last.y}H${nowX}" stroke="#12675f" stroke-dasharray="4 4"
+        stroke-width="2" vector-effect="non-scaling-stroke" fill="none"/>
+    </svg><div class="hours"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div><p>Zuletzt gemessen um ${lastTime} Uhr · <strong>${lastValue}</strong></p>`;
   }
 
   render() {
