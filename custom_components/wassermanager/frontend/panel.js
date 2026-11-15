@@ -86,9 +86,10 @@ class WaterManagerPanel extends HTMLElement {
         article:first-child{background:#123f47;color:#fff;border-color:#123f47}
         article strong{display:block;margin-top:.55rem;font-size:clamp(1.55rem,4vw,2.6rem);letter-spacing:-.055em}
         section{margin-bottom:14px}
-        .bars{display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:clamp(3px,1vw,12px);margin-top:20px}
-        .column{display:grid;grid-template-rows:145px auto;text-align:center;gap:8px;font-size:.75rem;color:#45636b}
+        .bars{display:grid;grid-template-columns:repeat(14,minmax(40px,1fr));gap:clamp(4px,1vw,12px);margin-top:20px;overflow-x:auto}
+        .column{display:grid;grid-template-rows:auto 145px auto;text-align:center;gap:8px;font-size:.75rem;color:#45636b}
         .track{display:flex;align-items:flex-end;background:#eef4f5;border-radius:6px;overflow:hidden}
+        .bar-value{font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
         .bar{width:100%;background:#78aaa8;border-radius:5px 5px 0 0}
         .column:last-child .bar{background:#12675f}
         .column.missing .track{background:repeating-linear-gradient(135deg,#eff4f5 0 5px,#e6eeee 5px 6px)}
@@ -101,7 +102,7 @@ class WaterManagerPanel extends HTMLElement {
         label{display:grid;gap:6px}
         input{width:12em;color:#122e36;background:white}
         [role=status]{min-height:1.4em}
-        @media(max-width:620px){.metrics{grid-template-columns:1fr}.column:nth-child(even):not(:last-child) .date{visibility:hidden}}
+        @media(max-width:620px){.metrics{grid-template-columns:1fr}}
       </style>
       <main>
         <header><div class="identity"><img id="brand" alt="" hidden><div><h1>Wasserverbrauch</h1><p id="source"></p></div></div><button id="refresh" type="button">Aktualisieren</button></header>
@@ -403,8 +404,9 @@ class WaterManagerPanel extends HTMLElement {
     this.element("bars").innerHTML = days.map(({ day, value }) => {
       const date = `${day.slice(8)}.${day.slice(5, 7)}.`;
       const label = value === null ? "kein Wert" : format(value * 1000, "L");
+      const visibleValue = value === null ? "—" : number.format(Math.round(value * 1000));
       const bar = value === null ? "" : `<span class="bar" style="height:${Math.max(2, value / max * 100)}%"></span>`;
-      return `<div class="column ${value === null ? "missing" : ""}" title="${date} ${label}" aria-label="${date} ${label}"><div class="track">${bar}</div><span class="date">${date}</span></div>`;
+      return `<div class="column ${value === null ? "missing" : ""}" title="${date} ${label}" aria-label="${date} ${label}"><span class="bar-value">${visibleValue}</span><div class="track">${bar}</div><span class="date">${date}</span></div>`;
     }).join("");
   }
 }
