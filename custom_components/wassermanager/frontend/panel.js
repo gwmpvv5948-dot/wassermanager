@@ -37,7 +37,7 @@ function dailyConsumption(history, current, calendar) {
   return calendar.days.slice(1).map((day, index) => ({
     day,
     value: difference(
-      day === calendar.today ? reading(current?.state) : latest.get(day)?.value,
+      latest.get(day)?.value,
       latest.get(calendar.days[index])?.value,
     ),
   }));
@@ -181,7 +181,22 @@ class WaterManagerPanel extends HTMLElement {
   }
 
   get currentValue() {
-    return reading(this.current?.state);
+    return reading(this.latestReading?.state);
+  }
+
+  get latestReading() {
+    const current = this.current;
+    if (reading(current?.state) !== null) return current;
+
+    let latest = this.lastValidEntity === this.entity ? this.lastValidReading : null;
+    const history = this.historyEntity === this.entity ? this.history : [];
+    for (const point of history) {
+      const timestamp = Date.parse(point.last_updated || point.last_changed);
+      const latestTime = Date.parse(latest?.last_updated || latest?.last_changed);
+      if (reading(point.state) !== null && Number.isFinite(timestamp) &&
+          (!Number.isFinite(latestTime) || timestamp > latestTime)) latest = point;
+    }
+    return latest;
   }
 
   toCubicMeters(state, unit) {
@@ -218,6 +233,11 @@ class WaterManagerPanel extends HTMLElement {
       this.element("baseline").disabled = unavailable;
       this.element("save").disabled = unavailable || this.saving;
     }
+    const current = this.current;
+    if (reading(current?.state) !== null) {
+      this.lastValidEntity = this.entity;
+      this.lastValidReading = current;
+    }
     this.render();
     if ((this.config?.demo || this.homeAssistant) && !this.loading &&
         (this.historyEntity !== this.entity || Date.now() - this.loadedAt > 60000)) {
@@ -237,6 +257,7 @@ class WaterManagerPanel extends HTMLElement {
     const entity = this.entity;
     const now = new Date();
     this.loadedAt = now.getTime();
+    if (this.historyEntity !== entity) this.history = [];
     this.historyEntity = entity;
     this.error = "";
     try {
@@ -266,7 +287,6 @@ class WaterManagerPanel extends HTMLElement {
         this.history = (result[0] || []).map(point => ({ ...point, state: this.toCubicMeters(point.state, unit) }));
       }
     } catch {
-      this.history = [];
       this.error = "Der Verlauf konnte nicht geladen werden.";
     } finally {
       this.loading = false;
@@ -275,11 +295,11 @@ class WaterManagerPanel extends HTMLElement {
     }
   }
 
-  renderIntraday(history) {
+  renderIntraday(history, latest) {
     const chart = this.element("intraday");
     const today = this.calendar.today;
     const yesterday = this.calendar.days.at(-2);
-    const readings = [...history, this.current].filter(Boolean).map(point => ({
+    const readings = [...history, latest].filter(Boolean).map(point => ({
       time: Date.parse(point.last_updated || point.last_changed),
       value: reading(point.state),
     })).filter(point => Number.isFinite(point.time) && point.value !== null)
@@ -310,10 +330,11 @@ class WaterManagerPanel extends HTMLElement {
   }
 
   render() {
-    const current = this.currentValue;
+    const latest = this.latestReading;
+    const current = reading(latest?.state);
     const history = this.historyEntity === this.entity ? this.history : [];
-    const days = dailyConsumption(history, this.current, this.calendar);
-    this.renderIntraday(history);
+    const days = dailyConsumption(history, latest, this.calendar);
+    this.renderIntraday(history, latest);
     const icon = this.element("brand");
     const iconUrl = this.config?.icon_url;
     if (iconUrl && icon.getAttribute("src") !== iconUrl) icon.src = iconUrl;
@@ -325,9 +346,20 @@ class WaterManagerPanel extends HTMLElement {
     this.element("today").textContent = format(days.at(-1).value === null ? null : days.at(-1).value * 1000, "L");
     this.element("annual").textContent = format(difference(current, this.baseline), "m³");
     this.element("baseline-label").textContent = `Zählerstand am 01.01.${this.calendar.year} in m³`;
-    this.element("status").textContent = this.error ||
-      (current === null && this.homeAssistant ? "Der konfigurierte Sensor liefert keinen gültigen Zählerstand in m³ oder L." :
-        this.baseline > current && current !== null ? "Der Ablesewert vom 1. Januar liegt über dem aktuellen Zählerstand." : "");
+    const timestamp = Date.parse(latest?.last_updated || latest?.last_changed);
+    const fallback = reading(this.current?.state) === null && latest;
+    const messages = [
+      fallback && (Number.isFinite(timestamp)
+        ? `Letzter gültiger Stand vom ${new Intl.DateTimeFormat("de-DE", {
+          dateStyle: "short", timeStyle: "short",
+          timeZone: this.homeAssistant?.config.time_zone || "Europe/Berlin",
+        }).format(timestamp)}.`
+        : "Anzeige mit dem letzten gültigen Zählerstand."),
+      this.error,
+      current === null && this.homeAssistant && "Für diesen Sensor liegt kein gültiger Zählerstand vor.",
+      current !== null && this.baseline > current && "Der Ablesewert vom 1. Januar liegt über dem letzten gültigen Zählerstand.",
+    ];
+    this.element("status").textContent = messages.filter(Boolean).join(" ");
     const max = Math.max(0.001, ...days.map(day => day.value ?? 0));
     this.element("bars").innerHTML = days.map(({ day, value }) => {
       const date = `${day.slice(8)}.${day.slice(5, 7)}.`;
