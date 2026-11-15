@@ -304,10 +304,16 @@ class WaterManagerPanel extends HTMLElement {
       value: reading(point.state),
     })).filter(point => Number.isFinite(point.time) && point.value !== null)
       .sort((a, b) => a.time - b.time);
-    const baseline = readings.findLast(point => this.calendar.dayOf(point.time) === yesterday);
+    const previous = readings.findLast(point => this.calendar.dayOf(point.time) === yesterday);
     const todayReadings = readings.filter(point => this.calendar.dayOf(point.time) === today);
-    if (!baseline || !todayReadings.length || todayReadings.some(point => point.value < baseline.value)) {
-      chart.innerHTML = "<p>Für den Verlauf fehlen gültige Ablesungen vom Vortag oder von heute.</p>";
+    const first = todayReadings[0];
+    const lastReading = todayReadings.at(-1);
+    const lastStand = latest ? `<p>Letzter gültiger Zählerstand · <strong>${format(reading(latest.state), "m³")}</strong></p>` : "";
+    const midnightBaseline = previous && todayReadings.every(point => point.value >= previous.value);
+    const baseline = midnightBaseline ? previous : first;
+    if (!first || (!midnightBaseline && first.time === lastReading.time) ||
+        todayReadings.some(point => point.value < baseline.value)) {
+      chart.innerHTML = `${lastStand}<p>Für die Verbrauchskurve fehlen vergleichbare Ablesungen.</p>`;
       return;
     }
 
@@ -326,17 +332,18 @@ class WaterManagerPanel extends HTMLElement {
     }));
     const path = points.map(({ x, y }) => `H${x.toFixed(2)}V${y.toFixed(2)}`).join("");
     const last = points.at(-1);
-    const lastReading = todayReadings.at(-1);
     const lastValue = format((lastReading.value - baseline.value) * 1000, "L");
     const lastTime = clock.format(lastReading.time);
+    const startX = midnightBaseline ? 0 : points[0].x;
+    const coverage = midnightBaseline ? "" : `<p>Verbrauch ab der ersten gültigen Ablesung um ${clock.format(first.time)} Uhr.</p>`;
     const nowX = Math.max(last.x, xAt(Date.now()));
     chart.innerHTML = `<svg viewBox="0 0 1000 90" preserveAspectRatio="none" role="img"
       aria-label="Verbrauch heute, zuletzt ${lastValue} um ${lastTime}">
       <path d="M0 86H1000" stroke="#d6e4e6" fill="none"/>
-      <path d="M0 86${path}" stroke="#12675f" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"/>
+      <path d="M${startX} 86${path}" stroke="#12675f" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"/>
       <path d="M${last.x} ${last.y}H${nowX}" stroke="#12675f" stroke-dasharray="4 4"
         stroke-width="2" vector-effect="non-scaling-stroke" fill="none"/>
-    </svg><div class="hours"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div><p>Zuletzt gemessen um ${lastTime} Uhr · <strong>${lastValue}</strong></p>`;
+    </svg><div class="hours"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div><p>Zuletzt gemessen um ${lastTime} Uhr · <strong>${lastValue}</strong></p>${lastStand}${coverage}`;
   }
 
   render() {
