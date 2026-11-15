@@ -107,17 +107,33 @@ class WaterManagerPanel extends HTMLElement {
           <h2 id="baseline-title">Ablesewert zum 1. Januar</h2>
           <form><label><span id="baseline-label">Zählerstand in m³</span>
             <input id="baseline" inputmode="decimal" placeholder="z. B. 810,500">
-          </label><button type="submit">Speichern</button></form>
+          </label><button id="save" type="submit">Speichern</button></form>
           <p id="feedback" role="status"></p>
         </section>
         <p id="status" role="status"></p>
       </main>`;
     this.shadowRoot.getElementById("refresh").onclick = () => this.loadHistory();
-    this.shadowRoot.querySelector("form").onsubmit = event => {
+    this.shadowRoot.querySelector("form").onsubmit = async event => {
       event.preventDefault();
       const value = reading(this.element("baseline").value);
       if (value === null || value > this.currentValue && this.currentValue !== null) {
         this.element("feedback").textContent = "Gib einen gültigen Stand bis zum aktuellen Zählerstand ein.";
+        return;
+      }
+      if (!this.config?.demo) {
+        const entity_id = this.config?.baseline_entity;
+        if (!entity_id || !this.homeAssistant?.states[entity_id]) return;
+        this.saving = true;
+        this.element("save").disabled = true;
+        try {
+          await this.homeAssistant.callService("number", "set_value", { entity_id, value });
+          this.element("feedback").textContent = "Ablesewert in Home Assistant gespeichert.";
+        } catch {
+          this.element("feedback").textContent = "Home Assistant konnte den Ablesewert nicht speichern.";
+        } finally {
+          this.saving = false;
+          this.update();
+        }
         return;
       }
       try {
@@ -170,23 +186,40 @@ class WaterManagerPanel extends HTMLElement {
   update() {
     if (!this.element("baseline")) return;
     this.calendar = calendar(new Date(), this.homeAssistant?.config.time_zone || "Europe/Berlin");
-    const key = `wassermanager:${this.config?.demo ? "demo" : this.entity}:${this.calendar.year}`;
-    if (this.storageKey !== key) {
-      this.storageKey = key;
-      try {
-        this.baseline = reading(localStorage.getItem(key));
-      } catch {
-        this.baseline = null;
+    if (this.config?.demo) {
+      const key = `wassermanager:demo:${this.calendar.year}`;
+      if (this.storageKey !== key) {
+        this.storageKey = key;
+        try {
+          this.baseline = reading(localStorage.getItem(key)) ?? 810.5;
+        } catch {
+          this.baseline = 810.5;
+        }
+        this.setBaselineInput();
       }
-      if (this.baseline === null && this.config?.demo) this.baseline = 810.5;
-      this.element("baseline").value = this.baseline == null ? "" : String(this.baseline).replace(".", ",");
-      this.element("feedback").textContent = "";
+    } else {
+      const entity = this.homeAssistant?.states[this.config?.baseline_entity];
+      const baseline = String(entity?.attributes.year) === this.calendar.year
+        ? reading(entity.state) : null;
+      if (baseline !== this.baseline || this.baselineYear !== this.calendar.year) {
+        this.baseline = baseline;
+        this.baselineYear = this.calendar.year;
+        this.setBaselineInput();
+      }
+      const unavailable = !entity || entity.state === "unavailable";
+      this.element("baseline").disabled = unavailable;
+      this.element("save").disabled = unavailable || this.saving;
     }
     this.render();
     if ((this.config?.demo || this.homeAssistant) && !this.loading &&
         (this.historyEntity !== this.entity || Date.now() - this.loadedAt > 60000)) {
       void this.loadHistory();
     }
+  }
+
+  setBaselineInput() {
+    this.element("baseline").value = this.baseline == null ? "" : String(this.baseline).replace(".", ",");
+    this.element("feedback").textContent = "";
   }
 
   async loadHistory() {

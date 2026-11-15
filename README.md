@@ -31,8 +31,12 @@ Neustart, damit die Integration den Pfad `wassermanager` registrieren kann.
   Fehlende Tage oder fallende Zählerstände erscheinen als Lücken. Der
   Verlauf wird beim Öffnen und während der Anzeige regelmäßig geladen.
 - **Seit 1. Januar** verwendet den aktuellen Zählerstand minus dem
-  eingetragenen Ablesewert in m³. Der Ablesewert wird pro Sensor und
-  Kalenderjahr im jeweiligen Browser gespeichert. Verwende bei einem
+  eingetragenen Ablesewert in m³. In Home Assistant speichert die
+  Number-Entität **Wassermanager Ablesewert 1. Januar** den Wert für das
+  laufende Kalenderjahr und stellt ihn nach einem Neustart wieder her.
+  Bei Jahreswechsel muss der neue Ablesewert eingetragen werden.
+  Frühere Browserwerte können einmalig im Panel neu eingetragen werden.
+  Die Vorschau verwendet weiterhin den Browserspeicher. Verwende bei einem
   Zählertausch einen durchgängigen kumulierten Sensor.
 
 Die Liveansicht verwendet die bestehende Home-Assistant-Sitzung für die
