@@ -5,30 +5,20 @@ lässt sich direkt im Browser öffnen und verwendet Demodaten.
 
 ## Installation in Home Assistant
 
-1. Kopiere `www/wassermanager/panel.js` in den Home-Assistant-Konfigurationsordner
-   nach `www/wassermanager/panel.js`.
-2. Ermittle unter **Entwicklerwerkzeuge → Zustände** die Entitäts-ID des
-   kumulierten Zählerstands unter `watermeter`. Verwende einen Sensor in m³
-   oder Litern.
-3. Ergänze `configuration.yaml` wie unten. Falls `panel_custom:` bereits
-   existiert, hänge den Eintrag an die vorhandene Liste an.
+Voraussetzung ist Home Assistant 2026.3 oder neuer.
 
-```yaml
-panel_custom:
-  - name: water-manager-panel
-    url_path: wassermanager
-    sidebar_title: Wassermanager
-    sidebar_icon: mdi:water
-    module_url: /local/wassermanager/panel.js
-    config:
-      entity: sensor.watermeter_value
-```
+1. Öffne **HACS → ⋮ → Benutzerdefinierte Repositories** und füge
+   `https://github.com/gwmpvv5948-dot/wassermanager` in der Kategorie
+   **Integration** hinzu.
+2. Lade **Wassermanager** in HACS herunter und starte Home Assistant neu.
+3. Öffne **Einstellungen → Geräte & Dienste → Integration hinzufügen →
+   Wassermanager** und wähle den Sensor für den kumulierten Zählerstand.
+4. Öffne **Wassermanager** in der Seitenleiste und trage den Ablesewert
+   vom 1. Januar in m³ ein.
 
-Ersetze `sensor.watermeter_value` bei Bedarf durch deine Entitäts-ID. Wenn
-der Sensor kein Einheitenattribut liefert, nimmt das Panel m³ an. Für einen
-einheitenlosen Liter-Sensor ergänze unter `config` die Zeile `unit: L`.
-Prüfe die Konfiguration und starte Home Assistant neu. Danach findest du
-**Wassermanager** in der Seitenleiste.
+Wenn du die vorherige Version über `panel_custom` eingerichtet hast,
+entferne deren Wassermanager-Eintrag aus `configuration.yaml` vor dem
+Neustart, damit die Integration den Pfad `wassermanager` registrieren kann.
 
 ## Berechnung
 

@@ -1,0 +1,12 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Wassermanager",
+        "description": "Wähle den Sensor für den fortlaufenden Zählerstand in Kubikmetern oder Litern.",
+        "data": {"entity": "Wasserzählersensor"}
+      }
+    },
+    "abort": {"single_instance_allowed": "Wassermanager ist bereits eingerichtet."}
+  }
+}

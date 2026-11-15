@@ -1,0 +1,12 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Wassermanager",
+        "description": "Select the sensor that reports the cumulative meter reading in cubic meters or liters.",
+        "data": {"entity": "Water meter sensor"}
+      }
+    },
+    "abort": {"single_instance_allowed": "Wassermanager is already configured."}
+  }
+}
