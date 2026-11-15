@@ -87,6 +87,8 @@ class WaterManagerPanel extends HTMLElement {
         .bar{width:100%;background:#78aaa8;border-radius:5px 5px 0 0}
         .column:last-child .bar{background:#12675f}
         .column.missing .track{background:repeating-linear-gradient(135deg,#eff4f5 0 5px,#e6eeee 5px 6px)}
+        #intraday svg{display:block;width:100%;height:90px;margin-top:12px}
+        .hours{display:flex;justify-content:space-between;font-size:.75rem;color:#45636b}
         form{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin-top:12px}
         label{display:grid;gap:6px}
         input{width:12em;color:#122e36;background:white}
@@ -100,6 +102,10 @@ class WaterManagerPanel extends HTMLElement {
           <article>Seit 1. Januar<strong id="annual">—</strong></article>
           <article>Zählerstand<strong id="current">—</strong></article>
         </div>
+        <section aria-labelledby="intraday-title">
+          <div class="chart-head"><h2 id="intraday-title">Verlauf heute</h2><p>Verbrauch seit Mitternacht · Liter</p></div>
+          <div id="intraday"></div>
+        </section>
         <section aria-labelledby="chart-title">
           <div class="chart-head"><h2 id="chart-title">Täglicher Verbrauch</h2><p>Letzte 14 Tage · Liter</p></div>
           <div class="bars" id="bars" aria-label="Täglicher Verbrauch in Litern"></div>
@@ -241,11 +247,19 @@ class WaterManagerPanel extends HTMLElement {
           if (index > 0) total += liters[index - 1];
           return { state: total / 1000, last_changed: day + "T12:00:00Z" };
         });
+        for (const [hour, litersUsed] of [[6, 24], [9, 75], [12, 121], [15, 160]]) {
+          const time = new Date();
+          time.setHours(hour, 0, 0, 0);
+          if (time < now) this.history.push({
+            state: (852082 - 184 + litersUsed) / 1000,
+            last_changed: time.toISOString(),
+          });
+        }
       } else {
         const start = new Date(Date.parse(this.calendar.days[0]) - 86400000);
         const query = new URLSearchParams({
           filter_entity_id: entity, end_time: now.toISOString(),
-          minimal_response: "", no_attributes: "",
+          minimal_response: "", no_attributes: "", significant_changes_only: "0",
         });
         const result = await this.homeAssistant.callApi("GET", `history/period/${start.toISOString()}?${query}`);
         const unit = this.homeAssistant.states[entity]?.attributes.unit_of_measurement || this.config?.unit || "m³";
@@ -261,9 +275,45 @@ class WaterManagerPanel extends HTMLElement {
     }
   }
 
+  renderIntraday(history) {
+    const chart = this.element("intraday");
+    const today = this.calendar.today;
+    const yesterday = this.calendar.days.at(-2);
+    const readings = [...history, this.current].filter(Boolean).map(point => ({
+      time: Date.parse(point.last_updated || point.last_changed),
+      value: reading(point.state),
+    })).filter(point => Number.isFinite(point.time) && point.value !== null)
+      .sort((a, b) => a.time - b.time);
+    const baseline = readings.findLast(point => this.calendar.dayOf(point.time) === yesterday);
+    const todayReadings = readings.filter(point => this.calendar.dayOf(point.time) === today);
+    if (!baseline || !todayReadings.length || todayReadings.some(point => point.value < baseline.value)) {
+      chart.innerHTML = "<p>Für den Verlauf fehlen gültige Ablesungen vom Vortag oder von heute.</p>";
+      return;
+    }
+
+    const clock = new Intl.DateTimeFormat("de-DE", {
+      timeZone: this.homeAssistant?.config.time_zone || "Europe/Berlin",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    });
+    const peak = Math.max(...todayReadings.map(point => (point.value - baseline.value) * 1000));
+    const path = todayReadings.map(point => {
+      const [hour, minute] = clock.format(point.time).split(":").map(Number);
+      const x = ((hour * 60 + minute) / 1440 * 1000).toFixed(2);
+      const y = (86 - (point.value - baseline.value) * 1000 / Math.max(1, peak) * 76).toFixed(2);
+      return `H${x}V${y}`;
+    }).join("");
+    chart.innerHTML = `<svg viewBox="0 0 1000 90" preserveAspectRatio="none" role="img"
+      aria-label="Verbrauch heute, höchster Stand ${format(peak, "L")}">
+      <path d="M0 86H1000" stroke="#d6e4e6" fill="none"/>
+      <path d="M0 86${path}" stroke="#12675f" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"/>
+    </svg><div class="hours"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>`;
+  }
+
   render() {
     const current = this.currentValue;
-    const days = dailyConsumption(this.historyEntity === this.entity ? this.history : [], this.current, this.calendar);
+    const history = this.historyEntity === this.entity ? this.history : [];
+    const days = dailyConsumption(history, this.current, this.calendar);
+    this.renderIntraday(history);
     const icon = this.element("brand");
     const iconUrl = this.config?.icon_url;
     if (iconUrl && icon.getAttribute("src") !== iconUrl) icon.src = iconUrl;
