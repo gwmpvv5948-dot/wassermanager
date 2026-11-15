@@ -24,21 +24,26 @@ function difference(end, start) {
 
 function dailyConsumption(history, current, calendar) {
   const latest = new Map();
+  let firstToday;
   const points = [...history, current].filter(Boolean);
   for (const point of points) {
     const timestamp = Date.parse(point.last_updated || point.last_changed);
     if (!Number.isFinite(timestamp)) continue;
     const day = calendar.dayOf(timestamp);
+    const value = reading(point.state);
+    if (value === null) continue;
+    if (day === calendar.today && (!firstToday || timestamp < firstToday.timestamp)) {
+      firstToday = { timestamp, value };
+    }
     if (timestamp >= (latest.get(day)?.timestamp ?? -Infinity)) {
-      const value = reading(point.state);
-      if (value !== null) latest.set(day, { timestamp, value });
+      latest.set(day, { timestamp, value });
     }
   }
   return calendar.days.slice(1).map((day, index) => ({
     day,
     value: difference(
       latest.get(day)?.value,
-      latest.get(calendar.days[index])?.value,
+      day === calendar.today ? firstToday?.value : latest.get(calendar.days[index])?.value,
     ),
   }));
 }
@@ -101,7 +106,7 @@ class WaterManagerPanel extends HTMLElement {
       <main>
         <header><div class="identity"><img id="brand" alt="" hidden><div><h1>Wasserverbrauch</h1><p id="source"></p></div></div><button id="refresh" type="button">Aktualisieren</button></header>
         <div class="metrics">
-          <article>Heute<strong id="today">—</strong></article>
+          <article>Heute<strong id="today">—</strong><small>Seit der ersten gültigen Ablesung</small></article>
           <article>Seit 1. Januar<strong id="annual">—</strong></article>
           <article>Zählerstand<strong id="current">—</strong></article>
         </div>
