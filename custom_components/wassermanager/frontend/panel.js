@@ -87,7 +87,10 @@ class WaterManagerPanel extends HTMLElement {
         .bar{width:100%;background:#78aaa8;border-radius:5px 5px 0 0}
         .column:last-child .bar{background:#12675f}
         .column.missing .track{background:repeating-linear-gradient(135deg,#eff4f5 0 5px,#e6eeee 5px 6px)}
-        #intraday svg{display:block;width:100%;height:90px;margin-top:12px}
+        .meter-plot{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 10px;margin-top:12px}
+        .meter-plot svg{display:block;width:100%;height:150px}
+        .meter-scale{display:flex;flex-direction:column;justify-content:space-between;font-size:.75rem;color:#45636b}
+        .meter-plot .hours{grid-column:2}
         .hours{display:flex;justify-content:space-between;font-size:.75rem;color:#45636b}
         form{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin-top:12px}
         label{display:grid;gap:6px}
@@ -103,7 +106,7 @@ class WaterManagerPanel extends HTMLElement {
           <article>Zählerstand<strong id="current">—</strong></article>
         </div>
         <section aria-labelledby="intraday-title">
-          <div class="chart-head"><h2 id="intraday-title">Verlauf heute</h2><p>Verbrauch seit Mitternacht · Liter</p></div>
+          <div class="chart-head"><h2 id="intraday-title">Verlauf heute</h2><p>Zählerstand · m³</p></div>
           <div id="intraday"></div>
         </section>
         <section aria-labelledby="chart-title">
@@ -298,52 +301,66 @@ class WaterManagerPanel extends HTMLElement {
   renderIntraday(history, latest) {
     const chart = this.element("intraday");
     const today = this.calendar.today;
-    const yesterday = this.calendar.days.at(-2);
-    const readings = [...history, latest].filter(Boolean).map(point => ({
-      time: Date.parse(point.last_updated || point.last_changed),
-      value: reading(point.state),
-    })).filter(point => Number.isFinite(point.time) && point.value !== null)
-      .sort((a, b) => a.time - b.time);
-    const previous = readings.findLast(point => this.calendar.dayOf(point.time) === yesterday);
-    const todayReadings = readings.filter(point => this.calendar.dayOf(point.time) === today);
-    const first = todayReadings[0];
-    const lastReading = todayReadings.at(-1);
-    const lastStand = latest ? `<p>Letzter gültiger Zählerstand · <strong>${format(reading(latest.state), "m³")}</strong></p>` : "";
-    const midnightBaseline = previous && todayReadings.every(point => point.value >= previous.value);
-    const baseline = midnightBaseline ? previous : first;
-    if (!first || (!midnightBaseline && first.time === lastReading.time) ||
-        todayReadings.some(point => point.value < baseline.value)) {
-      chart.innerHTML = `${lastStand}<p>Für die Verbrauchskurve fehlen vergleichbare Ablesungen.</p>`;
-      return;
-    }
-
+    const now = Date.now();
     const clock = new Intl.DateTimeFormat("de-DE", {
       timeZone: this.homeAssistant?.config.time_zone || "Europe/Berlin",
       hour: "2-digit", minute: "2-digit", hourCycle: "h23",
     });
-    const peak = Math.max(...todayReadings.map(point => (point.value - baseline.value) * 1000));
     const xAt = time => {
       const [hour, minute] = clock.format(time).split(":").map(Number);
       return (hour * 60 + minute) / 1440 * 1000;
     };
-    const points = todayReadings.map(({ time, value }) => ({
-      x: xAt(time),
-      y: 86 - (value - baseline.value) * 1000 / Math.max(1, peak) * 76,
-    }));
-    const path = points.map(({ x, y }) => `H${x.toFixed(2)}V${y.toFixed(2)}`).join("");
-    const last = points.at(-1);
-    const lastValue = format((lastReading.value - baseline.value) * 1000, "L");
-    const lastTime = clock.format(lastReading.time);
-    const startX = midnightBaseline ? 0 : points[0].x;
-    const coverage = midnightBaseline ? "" : `<p>Verbrauch ab der ersten gültigen Ablesung um ${clock.format(first.time)} Uhr.</p>`;
-    const nowX = Math.max(last.x, xAt(Date.now()));
-    chart.innerHTML = `<svg viewBox="0 0 1000 90" preserveAspectRatio="none" role="img"
-      aria-label="Verbrauch heute, zuletzt ${lastValue} um ${lastTime}">
-      <path d="M0 86H1000" stroke="#d6e4e6" fill="none"/>
-      <path d="M${startX} 86${path}" stroke="#12675f" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"/>
-      <path d="M${last.x} ${last.y}H${nowX}" stroke="#12675f" stroke-dasharray="4 4"
-        stroke-width="2" vector-effect="non-scaling-stroke" fill="none"/>
-    </svg><div class="hours"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div><p>Zuletzt gemessen um ${lastTime} Uhr · <strong>${lastValue}</strong></p>${lastStand}${coverage}`;
+
+    const states = new Map();
+    for (const point of [...history, latest, this.current].filter(Boolean)) {
+      const time = Date.parse(point.last_updated || point.last_changed);
+      if (Number.isFinite(time) && time <= now) states.set(time, reading(point.state));
+    }
+    const ordered = [...states].sort(([a], [b]) => a - b);
+    const before = ordered.filter(([time]) => this.calendar.dayOf(time) < today);
+    const points = ordered.filter(([time]) => this.calendar.dayOf(time) === today)
+      .map(([time, value]) => ({ x: xAt(time), value }));
+    if (before.length) {
+      const previous = before.at(-1)[1];
+      const lastKnown = before.findLast(([, value]) => value !== null)?.[1];
+      if (lastKnown != null) points.unshift({ x: 0, value: lastKnown });
+      if (previous === null) points.splice(lastKnown == null ? 0 : 1, 0, { x: 0, value: null });
+    }
+
+    const values = points.flatMap(({ value }) => value === null ? [] : [value]);
+    if (!values.length) {
+      chart.innerHTML = "<p>Für heute liegen keine Zählerstände vor.</p>";
+      return;
+    }
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const padding = Math.max((max - min) * 0.08, 0.001);
+    const low = Math.max(0, min - padding);
+    const high = max + padding;
+    const yAt = value => 140 - (value - low) / (high - low) * 130;
+    const solid = [];
+    const gaps = [];
+    let lastY;
+    for (const [index, point] of points.entries()) {
+      if (point.value !== null) lastY = yAt(point.value);
+      if (lastY === undefined) continue;
+      const next = points[index + 1];
+      const endX = Math.max(point.x, next?.x ?? xAt(now));
+      const path = point.value === null ? gaps : solid;
+      const step = point.value !== null && next?.value != null ? `V${yAt(next.value)}` : "";
+      path.push(`M${point.x} ${lastY}H${endX}${step}`);
+    }
+
+    chart.innerHTML = `<div class="meter-plot">
+      <div class="meter-scale" aria-hidden="true"><span>${number.format(high)}</span><span>${number.format((high + low) / 2)}</span><span>${number.format(low)}</span></div>
+      <svg viewBox="0 0 1000 150" preserveAspectRatio="none" role="img"
+        aria-label="Zählerstand heute in Kubikmetern. Gestrichelte Abschnitte markieren fehlende Werte.">
+        <path d="M0 10H1000M0 75H1000M0 140H1000" stroke="#d6e4e6" fill="none"/>
+        <path d="${solid.join("")}" stroke="#12675f" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke" fill="none"/>
+        <path d="${gaps.join("")}" stroke="#12675f" stroke-width="2" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" fill="none"/>
+      </svg>
+      <div class="hours"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+    </div>`;
   }
 
   render() {
