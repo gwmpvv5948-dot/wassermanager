@@ -1,5 +1,7 @@
 # Wassermanager
 
+<img src="https://raw.githubusercontent.com/gwmpvv5948-dot/wassermanager/main/custom_components/wassermanager/brand/icon.png" alt="Wassermanager" width="96" height="96">
+
 Eigenes Home-Assistant-Panel mit einer Vorschau in `preview.html`. Die Vorschau
 lässt sich direkt im Browser öffnen und verwendet Demodaten.
 

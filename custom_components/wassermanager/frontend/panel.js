@@ -68,6 +68,8 @@ class WaterManagerPanel extends HTMLElement {
         *{box-sizing:border-box}
         main{width:min(1100px,100%);margin:auto;padding:clamp(22px,5vw,64px)}
         header,.chart-head{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+        .identity{display:flex;align-items:center;gap:clamp(10px,2vw,22px)}
+        .identity img{width:clamp(50px,8vw,92px);height:auto}
         h1{font-size:clamp(2.4rem,6vw,4.5rem);letter-spacing:-.075em;margin:0;line-height:1.05}
         h2{margin:0;font-size:1.25rem;letter-spacing:-.025em}
         p{margin:.45rem 0;color:#45636b}
@@ -92,7 +94,7 @@ class WaterManagerPanel extends HTMLElement {
         @media(max-width:620px){.metrics{grid-template-columns:1fr}.column:nth-child(even):not(:last-child) .date{visibility:hidden}}
       </style>
       <main>
-        <header><div><h1>Wasserverbrauch</h1><p id="source"></p></div><button id="refresh" type="button">Aktualisieren</button></header>
+        <header><div class="identity"><img id="brand" alt="" hidden><div><h1>Wasserverbrauch</h1><p id="source"></p></div></div><button id="refresh" type="button">Aktualisieren</button></header>
         <div class="metrics">
           <article>Heute<strong id="today">—</strong></article>
           <article>Seit 1. Januar<strong id="annual">—</strong></article>
@@ -262,7 +264,13 @@ class WaterManagerPanel extends HTMLElement {
   render() {
     const current = this.currentValue;
     const days = dailyConsumption(this.historyEntity === this.entity ? this.history : [], this.current, this.calendar);
-    this.element("source").textContent = this.config?.demo ? "Testseite mit Demodaten" : this.entity;
+    const icon = this.element("brand");
+    const iconUrl = this.config?.icon_url;
+    if (iconUrl && icon.getAttribute("src") !== iconUrl) icon.src = iconUrl;
+    icon.hidden = !iconUrl;
+    const name = this.homeAssistant?.states[this.entity]?.attributes.friendly_name;
+    this.element("source").textContent = this.config?.demo ? "Testseite mit Demodaten"
+      : name && name !== this.entity ? name : "Wasserzähler";
     this.element("current").textContent = format(current, "m³");
     this.element("today").textContent = format(days.at(-1).value === null ? null : days.at(-1).value * 1000, "L");
     this.element("annual").textContent = format(difference(current, this.baseline), "m³");

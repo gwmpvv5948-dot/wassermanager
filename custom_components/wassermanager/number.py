@@ -28,6 +28,7 @@ class JanuaryReading(RestoreNumber):
     _attr_native_min_value = 0
     _attr_native_max_value = 999999999
     _attr_native_step = 0.001
+    _attr_icon = "wassermanager:meter"
     _attr_mode = NumberMode.BOX
     _attr_native_value = None
     _year = None

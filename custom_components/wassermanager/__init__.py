@@ -15,7 +15,7 @@ from .number import baseline_unique_id
 DOMAIN = "wassermanager"
 STATIC_URL = "/wassermanager-static"
 PANEL_PATH = "wassermanager"
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 PLATFORMS = [Platform.NUMBER]
 
 
@@ -25,8 +25,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not data.get("static_registered"):
         await hass.http.async_register_static_paths([
             StaticPathConfig(
+                f"{STATIC_URL}/brand/icon.png",
+                str(Path(__file__).parent / "brand" / "icon.png"),
+                False,
+            ),
+            StaticPathConfig(
                 STATIC_URL, str(Path(__file__).parent / "frontend"), False
-            )
+            ),
         ])
         add_extra_js_url(hass, f"{STATIC_URL}/sidebar-icon.js?v={VERSION}")
         data["static_registered"] = True
@@ -50,6 +55,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         config={
             "entity": entry.data["entity"],
             "baseline_entity": baseline.entity_id,
+            "icon_url": f"{STATIC_URL}/brand/icon.png?v={VERSION}",
         },
     )
     return True
