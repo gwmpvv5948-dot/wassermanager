@@ -73,6 +73,8 @@ class WaterManagerPanel extends HTMLElement {
         *{box-sizing:border-box}
         main{width:min(1100px,100%);margin:auto;padding:clamp(22px,5vw,64px)}
         header,.chart-head{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+        .header-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+        .camera-preview{width:clamp(120px,21vw,200px);max-height:110px;object-fit:contain;border-radius:9px}
         .identity{display:flex;align-items:center;gap:clamp(10px,2vw,22px)}
         .identity img{width:clamp(50px,8vw,92px);height:auto}
         h1{font-size:clamp(2.4rem,6vw,4.5rem);letter-spacing:-.075em;margin:0;line-height:1.05}
@@ -105,7 +107,10 @@ class WaterManagerPanel extends HTMLElement {
         @media(max-width:620px){.metrics{grid-template-columns:1fr}}
       </style>
       <main>
-        <header><div class="identity"><img id="brand" alt="" hidden><div><h1>Wasserverbrauch</h1><p id="source"></p></div></div><button id="refresh" type="button">Aktualisieren</button></header>
+        <header><div class="identity"><img id="brand" alt="" hidden><div><h1>Wasserverbrauch</h1><p id="source"></p></div></div><div class="header-actions">
+          <img id="camera-preview" class="camera-preview" alt="Standbild der Wasserzählerkamera" hidden>
+          <button id="refresh" type="button">Aktualisieren</button>
+        </div></header>
         <div class="metrics">
           <article>Heute<strong id="today">—</strong><small>Seit der ersten gültigen Ablesung</small></article>
           <article>Seit 1. Januar<strong id="annual">—</strong></article>
@@ -380,6 +385,21 @@ class WaterManagerPanel extends HTMLElement {
     if (iconUrl && icon.getAttribute("src") !== iconUrl) icon.src = iconUrl;
     icon.hidden = !iconUrl;
     const name = this.homeAssistant?.states[this.entity]?.attributes.friendly_name;
+    const camera = this.homeAssistant?.states["camera.wasserzaehler"];
+    const preview = this.element("camera-preview");
+    const picture = camera?.attributes?.entity_picture;
+    if (picture && camera.state !== "unavailable" && camera.state !== "unknown") {
+      const url = new URL(picture, window.location.href);
+      url.searchParams.set("_", String(this.loadedAt));
+      if (preview.src !== url.href) {
+        preview.onload = () => { preview.hidden = false; };
+        preview.onerror = () => { preview.hidden = true; };
+        preview.src = url.href;
+      }
+    } else {
+      preview.hidden = true;
+      preview.removeAttribute("src");
+    }
     this.element("source").textContent = this.config?.demo ? "Testseite mit Demodaten"
       : name && name !== this.entity ? name : "Wasserzähler";
     this.element("current").textContent = format(current, "m³");
