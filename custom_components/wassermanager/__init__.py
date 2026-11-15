@@ -15,7 +15,7 @@ from .number import baseline_unique_id
 DOMAIN = "wassermanager"
 STATIC_URL = "/wassermanager-static"
 PANEL_PATH = "wassermanager"
-VERSION = "0.1.11"
+VERSION = "0.1.12"
 PLATFORMS = [Platform.NUMBER]
 
 
