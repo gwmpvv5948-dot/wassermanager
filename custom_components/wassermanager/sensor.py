@@ -49,9 +49,8 @@ def calculate(history, current, baseline, now):
     """Calculate the same daily boundaries as the Wassermanager panel."""
     timezone = now.tzinfo
     today = now.date()
-    first_today = None
     latest_by_day = {}
-    samples = []
+    today_readings = []
     last_reading_at = None
     fallback_unit = (current.attributes.get("unit_of_measurement") or "m³") if current else "m³"
     for state in sorted([*history, *([current] if current else [])], key=lambda state: state.last_updated):
@@ -65,18 +64,29 @@ def calculate(history, current, baseline, now):
         latest_by_day[day] = value
         last_reading_at = local_time.isoformat()
         if day == today:
-            if first_today is None:
-                first_today = value
-            delta = difference(value, first_today)
-            if delta is not None:
-                samples.append([local_time.hour * 60 + local_time.minute, round(delta * 1000, 3)])
+            today_readings.append((local_time, value))
 
     daily = {}
+    first_day = today - timedelta(days=13)
+    previous = next(
+        (value for day, value in reversed(latest_by_day.items()) if day < first_day),
+        None,
+    )
     for offset in range(13, -1, -1):
         day = today - timedelta(days=offset)
-        start = first_today if offset == 0 else latest_by_day.get(day - timedelta(days=1))
-        delta = difference(latest_by_day.get(day), start)
+        end = latest_by_day.get(day, previous)
+        start = previous
+        if day == today and start is None and today_readings:
+            start = today_readings[0][1]
+        delta = difference(end, start)
         daily[day.isoformat()] = None if delta is None else round(delta * 1000, 3)
+        previous = end
+
+    samples = {0: 0} if start is not None else {}
+    for local_time, value in today_readings:
+        delta = difference(value, start)
+        if delta is not None:
+            samples[local_time.hour * 60 + local_time.minute] = round(delta * 1000, 3)
     completed = [value for date, value in daily.items() if date != today.isoformat() and value is not None]
     annual = difference(
         next(reversed(latest_by_day.values()), None),
@@ -88,7 +98,7 @@ def calculate(history, current, baseline, now):
         "durchschnitt_14_tage": round(sum(completed) / len(completed), 2) if completed else None,
         "valid_days": len(completed),
         "daily_liters": daily,
-        "today_points": list(dict(samples).items()),
+        "today_points": list(samples.items()),
         "source_available": reading(current) is not None,
         "last_meter_m3": next(reversed(latest_by_day.values()), None),
         "last_meter_at": last_reading_at,
@@ -121,9 +131,15 @@ class WaterMetrics(DataUpdateCoordinator):
             start = datetime.combine(now.date() - timedelta(days=14), datetime.min.time(), now.tzinfo)
             states = await get_instance(self.hass).async_add_executor_job(partial(
                 get_significant_states, self.hass, dt_util.as_utc(start), dt_util.as_utc(now),
-                [self.meter], include_start_time_state=False, significant_changes_only=False,
+                [self.meter], include_start_time_state=True, significant_changes_only=False,
             ))
-            self.history = states.get(self.meter, [])
+            # Meter events can arrive while Recorder is queried in the executor.
+            by_time = {
+                state.last_updated: state
+                for state in [*states.get(self.meter, []), *self.history]
+                if state.last_updated >= start
+            }
+            self.history = list(by_time.values())
             self.history_day = now.date()
         current = self.hass.states.get(self.meter)
         registry = entity_registry.async_get(self.hass)
