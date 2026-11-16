@@ -52,6 +52,7 @@ def calculate(history, current, baseline, now):
     first_today = None
     latest_by_day = {}
     samples = []
+    last_reading_at = None
     fallback_unit = (current.attributes.get("unit_of_measurement") or "m³") if current else "m³"
     for state in sorted([*history, *([current] if current else [])], key=lambda state: state.last_updated):
         value = reading(state, fallback_unit)
@@ -62,6 +63,7 @@ def calculate(history, current, baseline, now):
         if local_time > now:
             continue
         latest_by_day[day] = value
+        last_reading_at = local_time.isoformat()
         if day == today:
             if first_today is None:
                 first_today = value
@@ -88,6 +90,8 @@ def calculate(history, current, baseline, now):
         "daily_liters": daily,
         "today_points": list(dict(samples).items()),
         "source_available": reading(current) is not None,
+        "last_meter_m3": next(reversed(latest_by_day.values()), None),
+        "last_meter_at": last_reading_at,
     }
 
 
@@ -175,7 +179,8 @@ class WaterSensor(CoordinatorEntity[WaterMetrics], SensorEntity):
         data = self.coordinator.data or {}
         attributes = {"source_available": data.get("source_available", False)}
         if self.key == "verbrauch_heute":
-            attributes.update({key: data.get(key) for key in ("daily_liters", "today_points")})
+            attributes["meter_entity"] = self.coordinator.meter
+            attributes.update({key: data.get(key) for key in ("daily_liters", "today_points", "last_meter_m3", "last_meter_at")})
         if self.key == "durchschnitt_14_tage":
             attributes["valid_days"] = data.get("valid_days", 0)
         return attributes
