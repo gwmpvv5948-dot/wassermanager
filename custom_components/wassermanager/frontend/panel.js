@@ -84,7 +84,7 @@ class WaterManagerPanel extends HTMLElement {
         button,input{font:inherit;border-radius:9px;border:1px solid #9cbbbe;padding:.62rem .8rem}
         button{cursor:pointer;background:#12675f;color:white;border-color:#12675f}
         button[disabled]{opacity:.65;cursor:wait}
-        .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:26px 0 14px}
+        .metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:26px 0 14px}
         article,section{background:#fff;border:1px solid #d6e4e6;border-radius:18px;padding:clamp(16px,3vw,26px)}
         article:first-child{background:#123f47;color:#fff;border-color:#123f47}
         article strong{display:block;margin-top:.55rem;font-size:clamp(1.55rem,4vw,2.6rem);letter-spacing:-.055em}
@@ -105,7 +105,7 @@ class WaterManagerPanel extends HTMLElement {
         label{display:grid;gap:6px}
         input{width:12em;color:#122e36;background:white}
         [role=status]{min-height:1.4em}
-        @media(max-width:620px){.metrics{grid-template-columns:1fr}}
+        @media(max-width:780px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
       </style>
       <main>
         <header><div class="identity"><img id="brand" alt="" hidden><div><h1>Wasserverbrauch</h1><p id="source"></p></div></div>
@@ -113,6 +113,7 @@ class WaterManagerPanel extends HTMLElement {
         <div class="metrics">
           <article>Heute<strong id="today">—</strong><small>Seit der ersten gültigen Ablesung</small></article>
           <article>Seit 1. Januar<strong id="annual">—</strong></article>
+          <article><span id="forecast-label">Jahresprognose</span><strong id="forecast">—</strong><small id="forecast-basis"></small></article>
           <article>Zählerstand<strong id="current">—</strong></article>
         </div>
         <section aria-labelledby="intraday-title">
@@ -431,7 +432,25 @@ class WaterManagerPanel extends HTMLElement {
       : name && name !== this.entity ? name : "Wasserzähler";
     this.element("current").textContent = format(current, "m³");
     this.element("today").textContent = format(days.at(-1).value === null ? null : days.at(-1).value * 1000, "L");
-    this.element("annual").textContent = format(difference(current, this.baseline), "m³");
+    const annual = difference(current, this.baseline);
+    this.element("annual").textContent = format(annual, "m³");
+    const completed = days.slice(0, -1).filter(day => day.value !== null);
+    const average = completed.length
+      ? completed.reduce((sum, day) => sum + day.value, 0) / completed.length
+      : null;
+    const latestTimestamp = Date.parse(latest?.last_updated || latest?.last_changed);
+    const timestampDay = Number.isFinite(latestTimestamp) ? this.calendar.dayOf(new Date(latestTimestamp)) : null;
+    const remainingDays = (Date.UTC(Number(this.calendar.year) + 1, 0, 1)
+      - Date.parse(this.calendar.today + "T00:00:00Z")) / 86400000 - 1;
+    const forecast = annual !== null && average !== null && timestampDay === this.calendar.today
+      ? annual + average * remainingDays : null;
+    this.element("forecast-label").textContent = `Prognose bis 31.12.${this.calendar.year}`;
+    this.element("forecast").textContent = forecast === null ? "—" : `≈ ${format(forecast, "m³")}`;
+    this.element("forecast-basis").textContent = forecast !== null
+      ? `Ø ${format(average * 1000, "L/Tag")} × ${remainingDays} Resttage`
+      : annual === null ? "Gültiger Januarstand und Zählerstand nötig"
+        : timestampDay !== this.calendar.today ? "Warte auf einen Zählerstand von heute"
+          : "Mindestens ein abgeschlossener Tag nötig";
     this.element("baseline-label").textContent = `Zählerstand am 01.01.${this.calendar.year} in m³`;
     const timestamp = Date.parse(latest?.last_updated || latest?.last_changed);
     const fallback = reading(this.current?.state) === null && latest;
