@@ -20,6 +20,7 @@ from homeassistant.util import dt as dt_util
 from .number import baseline_unique_id
 
 METRICS = {
+    "jahresprognose": ("Jahresprognose", UnitOfVolume.CUBIC_METERS),
     "verbrauch_heute": ("Verbrauch heute", UnitOfVolume.LITERS),
     "verbrauch_seit_januar": ("Verbrauch seit Januar", UnitOfVolume.CUBIC_METERS),
     "durchschnitt_14_tage": ("Durchschnitt 14 Tage", UnitOfVolume.LITERS),
@@ -92,7 +93,17 @@ def calculate(history, current, baseline, now):
         next(reversed(latest_by_day.values()), None),
         reading(baseline) if baseline and str(baseline.attributes.get("year")) == str(today.year) else None,
     )
+    remaining_days = (today.replace(month=12, day=31) - today).days
+    average = sum(completed) / len(completed) if completed else None
+    forecast = (
+        annual + average * remaining_days / 1000
+        if annual is not None and average is not None and today_readings
+        else None
+    )
     return {
+        "jahresprognose": None if forecast is None else round(forecast, 3),
+        "forecast_year": today.year,
+        "forecast_remaining_days": remaining_days,
         "verbrauch_heute": daily[today.isoformat()],
         "verbrauch_seit_januar": None if annual is None else round(annual, 3),
         "durchschnitt_14_tage": round(sum(completed) / len(completed), 2) if completed else None,
@@ -168,7 +179,7 @@ class WaterSensor(CoordinatorEntity[WaterMetrics], SensorEntity):
         self._attr_native_unit_of_measurement = unit
         if key == "durchschnitt_14_tage":
             self._attr_state_class = SensorStateClass.MEASUREMENT
-        else:
+        elif key != "jahresprognose":
             self._attr_device_class = SensorDeviceClass.WATER
             self._attr_state_class = SensorStateClass.TOTAL
 
@@ -197,6 +208,13 @@ class WaterSensor(CoordinatorEntity[WaterMetrics], SensorEntity):
         if self.key == "verbrauch_heute":
             attributes["meter_entity"] = self.coordinator.meter
             attributes.update({key: data.get(key) for key in ("daily_liters", "today_points", "last_meter_m3", "last_meter_at")})
+        if self.key == "jahresprognose":
+            attributes.update(
+                meter_entity=self.coordinator.meter,
+                year=data.get("forecast_year"),
+                remaining_days=data.get("forecast_remaining_days"),
+                average_liters=data.get("durchschnitt_14_tage"),
+            )
         if self.key == "durchschnitt_14_tage":
             attributes["valid_days"] = data.get("valid_days", 0)
         return attributes

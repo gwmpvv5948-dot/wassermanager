@@ -442,12 +442,21 @@ class WaterManagerPanel extends HTMLElement {
     const timestampDay = Number.isFinite(latestTimestamp) ? this.calendar.dayOf(new Date(latestTimestamp)) : null;
     const remainingDays = (Date.UTC(Number(this.calendar.year) + 1, 0, 1)
       - Date.parse(this.calendar.today + "T00:00:00Z")) / 86400000 - 1;
-    const forecast = annual !== null && average !== null && timestampDay === this.calendar.today
+    const publishedForecast = !this.config?.demo && Object.values(this.homeAssistant?.states ?? {}).find(
+      state => state.entity_id.startsWith("sensor.") &&
+        state.attributes.meter_entity === this.entity &&
+        state.attributes.year === Number(this.calendar.year) &&
+        "remaining_days" in state.attributes
+    );
+    const calculatedForecast = annual !== null && average !== null && timestampDay === this.calendar.today
       ? annual + average * remainingDays : null;
+    const forecast = publishedForecast
+      ? (Number.isFinite(Number(publishedForecast.state)) ? Number(publishedForecast.state) : null)
+      : calculatedForecast;
     this.element("forecast-label").textContent = `Prognose bis 31.12.${this.calendar.year}`;
     this.element("forecast").textContent = forecast === null ? "—" : `≈ ${format(forecast, "m³")}`;
     this.element("forecast-basis").textContent = forecast !== null
-      ? `Ø ${format(average * 1000, "L/Tag")} × ${remainingDays} Resttage`
+      ? `Ø ${format(publishedForecast?.attributes?.average_liters ?? average * 1000, "L/Tag")} × ${publishedForecast?.attributes?.remaining_days ?? remainingDays} Resttage`
       : annual === null ? "Gültiger Januarstand und Zählerstand nötig"
         : timestampDay !== this.calendar.today ? "Warte auf einen Zählerstand von heute"
           : "Mindestens ein abgeschlossener Tag nötig";
