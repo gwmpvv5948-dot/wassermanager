@@ -24,7 +24,7 @@ function difference(end, start) {
 
 function dailyConsumption(history, current, calendar) {
   const latest = new Map();
-  let firstToday;
+  const first = new Map();
   const points = [...history, current].filter(Boolean);
   for (const point of points) {
     const timestamp = Date.parse(point.last_updated || point.last_changed);
@@ -32,18 +32,18 @@ function dailyConsumption(history, current, calendar) {
     const day = calendar.dayOf(timestamp);
     const value = reading(point.state);
     if (value === null) continue;
-    if (day === calendar.today && (!firstToday || timestamp < firstToday.timestamp)) {
-      firstToday = { timestamp, value };
+    if (timestamp < (first.get(day)?.timestamp ?? Infinity)) {
+      first.set(day, { timestamp, value });
     }
     if (timestamp >= (latest.get(day)?.timestamp ?? -Infinity)) {
       latest.set(day, { timestamp, value });
     }
   }
-  return calendar.days.slice(1).map((day, index) => ({
+  return calendar.days.slice(1).map(day => ({
     day,
     value: difference(
       latest.get(day)?.value,
-      day === calendar.today ? firstToday?.value : latest.get(calendar.days[index])?.value,
+      first.get(day)?.value,
     ),
   }));
 }

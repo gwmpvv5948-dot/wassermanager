@@ -51,6 +51,7 @@ def calculate(history, current, baseline, now):
     timezone = now.tzinfo
     today = now.date()
     latest_by_day = {}
+    first_by_day = {}
     today_readings = []
     last_reading_at = None
     fallback_unit = (current.attributes.get("unit_of_measurement") or "m³") if current else "m³"
@@ -62,28 +63,20 @@ def calculate(history, current, baseline, now):
         day = local_time.date()
         if local_time > now:
             continue
+        first_by_day.setdefault(day, value)
         latest_by_day[day] = value
         last_reading_at = local_time.isoformat()
         if day == today:
             today_readings.append((local_time, value))
 
     daily = {}
-    first_day = today - timedelta(days=13)
-    previous = next(
-        (value for day, value in reversed(latest_by_day.items()) if day < first_day),
-        None,
-    )
     for offset in range(13, -1, -1):
         day = today - timedelta(days=offset)
-        end = latest_by_day.get(day, previous)
-        start = previous
-        if day == today and start is None and today_readings:
-            start = today_readings[0][1]
-        delta = difference(end, start)
+        delta = difference(latest_by_day.get(day), first_by_day.get(day))
         daily[day.isoformat()] = None if delta is None else round(delta * 1000, 3)
-        previous = end
 
-    samples = {0: 0} if start is not None else {}
+    start = first_by_day.get(today)
+    samples = {}
     for local_time, value in today_readings:
         delta = difference(value, start)
         if delta is not None:
