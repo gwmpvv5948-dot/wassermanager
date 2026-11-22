@@ -1,0 +1,10 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {publishedDailyConsumption} from '../custom_components/wassermanager/frontend/daily-values.js';
+const calendar={today:'2026-11-18',days:['2026-11-16','2026-11-17','2026-11-18']};
+const make=(state='250',unit='L',meter='sensor.meter',id='sensor.wassermanager_verbrauch_heute')=>({entity_id:id,state,attributes:{meter_entity:meter,unit_of_measurement:unit,daily_liters:{'2026-11-17':180,'2026-11-18':230}}});
+test('Today always uses the shared entity, even when historical daily value differs',()=>{const result=publishedDailyConsumption({'sensor.wassermanager_verbrauch_heute':make()},'sensor.meter',calendar);assert.deepEqual(result.days,[{day:'2026-11-17',value:.18},{day:'2026-11-18',value:.25}]);});
+test('A renamed sensor is resolved only for the configured meter',()=>{const source=make('90','L','sensor.meter','sensor.renamed');assert.equal(publishedDailyConsumption({'sensor.renamed':source},'sensor.meter',calendar).days.at(-1).value,.09);assert.equal(publishedDailyConsumption({'sensor.renamed':source},'sensor.other',calendar),null);});
+test('Unavailable or missing readings never become zero',()=>{for(const value of ['unavailable','unknown','',null,'-1'])assert.equal(publishedDailyConsumption({'sensor.wassermanager_verbrauch_heute':make(value)},'sensor.meter',calendar).days.at(-1).value,null);assert.equal(publishedDailyConsumption({},'sensor.meter',calendar),null);});
+test('Zero and cubic meters keep correct units',()=>{assert.equal(publishedDailyConsumption({'sensor.wassermanager_verbrauch_heute':make('0')},'sensor.meter',calendar).days.at(-1).value,0);assert.equal(publishedDailyConsumption({'sensor.wassermanager_verbrauch_heute':make('.25','m³')},'sensor.meter',calendar).days.at(-1).value,.25);});
+test('Missing daily history remains missing',()=>{const source=make();source.attributes.daily_liters={};assert.equal(publishedDailyConsumption({'sensor.wassermanager_verbrauch_heute':source},'sensor.meter',calendar).days[0].value,null);});

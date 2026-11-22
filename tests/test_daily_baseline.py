@@ -20,6 +20,14 @@ def calculate(history, current):
     return ns['calculate'](history, current, None, datetime(2026,11,19,16,tzinfo=TZ))
 
 class DailyBaselineTests(unittest.TestCase):
+    def test_today_prefers_previous_day_even_when_today_decreases(self):
+        result = calculate([
+            state('2026-11-18T23:59:00+01:00', 854.140),
+            state('2026-11-19T03:00:00+01:00', 854.144),
+        ], state('2026-11-19T14:00:00+01:00', 854.142))
+        self.assertEqual(result['verbrauch_heute'], 2)
+        self.assertEqual(result['today_points'], [(0, 0), (180, 4), (840, 2)])
+
     def test_ignores_higher_previous_day_reading(self):
         result=calculate([state('2026-11-18T23:59:00+01:00',854),state('2026-11-19T03:00:00+01:00',853.2)],state('2026-11-19T14:00:00+01:00',853.324))
         self.assertEqual(result['verbrauch_heute'],124)

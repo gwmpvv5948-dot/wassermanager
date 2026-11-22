@@ -24,10 +24,11 @@ Neustart, damit die Integration den Pfad `wassermanager` registrieren kann.
 
 ## Berechnung
 
-- **Heute** verwendet den letzten gültigen Zählerstand des Tages minus
-  der ersten gültigen Ablesung desselben Tages.
-- **Täglicher Verbrauch** zeigt die Differenz zwischen der ersten und letzten
-  gültigen Ablesung jedes Kalendertags in Litern. Grundlage
+- **Heute** verwendet den aktuellsten gültigen Zählerstand minus dem letzten
+  gültigen Stand des Vortags. Fehlt dieser oder liegt er über dem aktuellen
+  Stand, dient die erste gültige Ablesung von heute als Startwert.
+- **Täglicher Verbrauch** zeigt für abgeschlossene Tage die Differenz zwischen
+  der ersten und letzten gültigen Ablesung in Litern. Grundlage
   sind für frühere Tage die verfügbaren Recorder-Daten und die Zeitzone von Home Assistant.
   Der heutige Balken verwendet denselben Wert wie **Heute**. Fehlende Tage
   oder fallende Zählerstände erscheinen als Lücken. Der
@@ -43,11 +44,3 @@ Neustart, damit die Integration den Pfad `wassermanager` registrieren kann.
 
 Die Liveansicht verwendet die bestehende Home-Assistant-Sitzung für die
 History-API. Es werden keine Zugangsdaten im Projekt hinterlegt.
-
-
-Ab Version 0.1.18 ist der Tagesverbrauch die Differenz zwischen dem letzten
-und dem ersten gültigen Zählerstand desselben Kalendertags (HA-Zeitzone).
-Die erste Messung ergibt 0 Liter; vor dieser Messung bleibt der Tag unbekannt.
-Dies gilt auch für vergangene Tage und den daraus berechneten Durchschnitt.
-Verbrauch zwischen Mitternacht und der ersten Messung wird nicht erfasst.
-Rückwärtskorrekturen unter den ersten Tageswert bleiben als ungültig markiert.

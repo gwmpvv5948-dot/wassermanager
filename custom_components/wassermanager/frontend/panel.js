@@ -1,3 +1,4 @@
+import {publishedDailyConsumption} from "./daily-values.js?v=shared-daily-1";
 const number = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 });
 const format = (value, unit) => value == null ? "—" : `${number.format(value)} ${unit}`;
 
@@ -39,13 +40,13 @@ function dailyConsumption(history, current, calendar) {
       latest.set(day, { timestamp, value });
     }
   }
-  return calendar.days.slice(1).map(day => ({
-    day,
-    value: difference(
-      latest.get(day)?.value,
-      first.get(day)?.value,
-    ),
-  }));
+  return calendar.days.slice(1).map((day, index) => {
+    const end = latest.get(day)?.value;
+    const previous = latest.get(calendar.days[index])?.value;
+    const start = day === calendar.today && previous !== undefined && previous <= end
+      ? previous : first.get(day)?.value;
+    return { day, value: difference(end, start) };
+  });
 }
 
 class WaterManagerPanel extends HTMLElement {
@@ -111,7 +112,7 @@ class WaterManagerPanel extends HTMLElement {
         <header><div class="identity"><img id="brand" alt="" hidden><div><h1>Wasserverbrauch</h1><p id="source"></p></div></div>
           <button id="refresh" type="button">Aktualisieren</button></header>
         <div class="metrics">
-          <article>Heute<strong id="today">—</strong><small>Seit der ersten gültigen Ablesung</small></article>
+          <article>Heute<strong id="today">—</strong><small>Seit Tagesbeginn</small></article>
           <article>Seit 1. Januar<strong id="annual">—</strong></article>
           <article><span id="forecast-label">Jahresprognose</span><strong id="forecast">—</strong><small id="forecast-basis"></small></article>
           <article>Zählerstand<strong id="current">—</strong></article>
@@ -420,7 +421,15 @@ class WaterManagerPanel extends HTMLElement {
     const latest = this.latestReading;
     const current = reading(latest?.state);
     const history = this.historyEntity === this.entity ? this.history : [];
-    const days = dailyConsumption(history, latest, this.calendar);
+    const publishedDaily = !this.config?.demo && publishedDailyConsumption(this.homeAssistant?.states, this.entity, this.calendar);
+    const calculatedDays = dailyConsumption(history, latest, this.calendar);
+    const calculatedToday = calculatedDays.at(-1).value;
+    const days = calculatedDays.map((day, index) => ({
+      ...day,
+      value: day.day === this.calendar.today
+        ? calculatedToday ?? publishedDaily?.days[index]?.value ?? null
+        : publishedDaily?.days[index]?.value ?? day.value,
+    }));
     this.renderIntraday(history, latest);
     const icon = this.element("brand");
     const iconUrl = this.config?.icon_url;
@@ -464,6 +473,7 @@ class WaterManagerPanel extends HTMLElement {
     const timestamp = Date.parse(latest?.last_updated || latest?.last_changed);
     const fallback = reading(this.current?.state) === null && latest;
     const messages = [
+      !this.config?.demo && days.at(-1).value===null && "Tagesverbrauch derzeit nicht verfügbar.",
       fallback && (Number.isFinite(timestamp)
         ? `Letzter gültiger Stand vom ${new Intl.DateTimeFormat("de-DE", {
           dateStyle: "short", timeStyle: "short",

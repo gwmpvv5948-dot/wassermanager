@@ -69,16 +69,21 @@ def calculate(history, current, baseline, now):
         if day == today:
             today_readings.append((local_time, value))
 
+    previous = latest_by_day.get(today - timedelta(days=1))
+    today_end = latest_by_day.get(today)
+    use_previous = previous is not None and today_end is not None and previous <= today_end
+    today_start = previous if use_previous else first_by_day.get(today)
+
     daily = {}
     for offset in range(13, -1, -1):
         day = today - timedelta(days=offset)
-        delta = difference(latest_by_day.get(day), first_by_day.get(day))
+        start = today_start if day == today else first_by_day.get(day)
+        delta = difference(latest_by_day.get(day), start)
         daily[day.isoformat()] = None if delta is None else round(delta * 1000, 3)
 
-    start = first_by_day.get(today)
-    samples = {}
+    samples = {0: 0} if use_previous else {}
     for local_time, value in today_readings:
-        delta = difference(value, start)
+        delta = difference(value, today_start)
         if delta is not None:
             samples[local_time.hour * 60 + local_time.minute] = round(delta * 1000, 3)
     completed = [value for date, value in daily.items() if date != today.isoformat() and value is not None]
